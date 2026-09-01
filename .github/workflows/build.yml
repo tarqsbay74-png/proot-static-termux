@@ -63,10 +63,10 @@ jobs:
         run: |
           cd proot/src
           # استخدم المسار المطلق للمترجم من NDK
-          export CC=$ANDROID_NDK/bin/aarch64-linux-android21-clang
-          export CXX=$ANDROID_NDK/bin/aarch64-linux-android21-clang++
-          export AR=$ANDROID_NDK/bin/aarch64-linux-android-ar
-          export LD=$ANDROID_NDK/bin/aarch64-linux-android-ld
+          export CC=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+          export CXX=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++
+          export AR=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar
+          export LD=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ld
           export CFLAGS="-fPIC -O2"
           export LDFLAGS="-static -L$PWD/../../libs"
           make PROOT_WITH_LIBANDROID_SHMEM=true
