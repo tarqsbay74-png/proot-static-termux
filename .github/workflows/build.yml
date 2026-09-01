@@ -14,14 +14,14 @@ jobs:
         uses: actions/checkout@v4
 
       # ----------------------------------------------
-      # 1. تثبيت Android NDK
+      # 1. تثبيت Android NDK (إصدار مستقر)
       # ----------------------------------------------
       - name: Setup Android NDK
         run: |
-          wget -q https://dl.google.com/android/repository/android-ndk-r27b-linux.zip
-          unzip -q android-ndk-r27b-linux.zip
-          echo "ANDROID_NDK=$PWD/android-ndk-r27b" >> $GITHUB_ENV
-          echo "$PWD/android-ndk-r27b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+          wget -q https://dl.google.com/android/repository/android-ndk-r23c-linux.zip
+          unzip -q android-ndk-r23c-linux.zip
+          echo "ANDROID_NDK=$PWD/android-ndk-r23c" >> $GITHUB_ENV
+          echo "$PWD/android-ndk-r23c/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
       # ----------------------------------------------
       # 2. تحميل libtalloc الثابتة وملفات الرأس
@@ -29,10 +29,8 @@ jobs:
       - name: Download libtalloc static and headers
         run: |
           mkdir -p libs include
-          # تحميل المكتبة الثابتة
           curl -L -o libs/libtalloc.a https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc-static/libtalloc-static_2.4.3_aarch64.deb
           ar x libs/libtalloc.a --output=libs/
-          # تحميل حزمة libtalloc التي تحتوي على talloc.h
           curl -L -o libs/libtalloc-dev.deb https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/libtalloc_2.4.3_aarch64.deb
           ar x libs/libtalloc-dev.deb --output=libs/
           tar -xf libs/data.tar.xz -C libs/
@@ -53,16 +51,18 @@ jobs:
         run: git clone https://github.com/termux/proot
 
       # ----------------------------------------------
-      # 5. تعديل GNUmakefile وإصلاح ملف enter.c
+      # 5. تعديل الملفات المصدر
       # ----------------------------------------------
       - name: Patch source files
         run: |
           cd proot/src
-          # إضافة -D_GNU_SOURCE لتفعيل getifaddrs
+          # إضافة تعريف _GNU_SOURCE في بداية enter.c
+          sed -i '1i#define _GNU_SOURCE' syscall/enter.c
+          # إضافة تضمين ifaddrs.h
+          sed -i '2i#include <ifaddrs.h>' syscall/enter.c
+          # تعديل CFLAGS في GNUmakefile لإضافة مسار include و -D_GNU_SOURCE
           sed -i 's|^CFLAGS += -Wall -Wextra -O2|CFLAGS += -Wall -Wextra -O2 -D_GNU_SOURCE -I$PWD/../../include|' GNUmakefile
-          # إضافة include <ifaddrs.h> في بداية enter.c
-          sed -i '1i #include <ifaddrs.h>' syscall/enter.c
-          # تصحيح LDFLAGS
+          # تعديل LDFLAGS لإضافة -static ومسار المكتبات
           sed -i 's|^LDFLAGS += -ltalloc -Wl,-z,noexecstack|LDFLAGS += -static -L$PWD/../../libs -ltalloc -Wl,-z,noexecstack|' GNUmakefile
 
       # ----------------------------------------------
