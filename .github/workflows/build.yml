@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ----------------------------------------------
-      # 1. تثبيت Android NDK (إصدار مستقر)
+      # 1. تثبيت Android NDK
       # ----------------------------------------------
       - name: Setup Android NDK
         run: |
@@ -24,7 +24,7 @@ jobs:
           echo "$PWD/android-ndk-r23c/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
       # ----------------------------------------------
-      # 2. تحميل libtalloc الثابتة وملفات الرأس
+      # 2. تحميل libtalloc (ثابتة + headers)
       # ----------------------------------------------
       - name: Download libtalloc static and headers
         run: |
@@ -56,27 +56,30 @@ jobs:
       - name: Patch source files
         run: |
           cd proot/src
-          # إضافة تعريف _GNU_SOURCE في بداية enter.c
+          # حل مشكلة getifaddrs
           sed -i '1i#define _GNU_SOURCE' syscall/enter.c
-          # إضافة تضمين ifaddrs.h
           sed -i '2i#include <ifaddrs.h>' syscall/enter.c
-          # تعديل CFLAGS في GNUmakefile لإضافة مسار include و -D_GNU_SOURCE
+          # تعديل GNUmakefile
           sed -i 's|^CFLAGS += -Wall -Wextra -O2|CFLAGS += -Wall -Wextra -O2 -D_GNU_SOURCE -I$PWD/../../include|' GNUmakefile
-          # تعديل LDFLAGS لإضافة -static ومسار المكتبات
           sed -i 's|^LDFLAGS += -ltalloc -Wl,-z,noexecstack|LDFLAGS += -static -L$PWD/../../libs -ltalloc -Wl,-z,noexecstack|' GNUmakefile
 
       # ----------------------------------------------
-      # 6. بناء proot
+      # 6. بناء proot مع تحديد أدوات NDK بالكامل
       # ----------------------------------------------
       - name: Build proot
         run: |
           cd proot/src
+          # تحديد جميع أدوات NDK
           export CC=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
           export CXX=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++
           export AR=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar
           export LD=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ld
+          export STRIP=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip
+          export OBJCOPY=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-objcopy
+          export OBJDUMP=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-objdump
           export CFLAGS="-fPIC -O2 -D_GNU_SOURCE -I$PWD/../../include"
           export LDFLAGS="-static -L$PWD/../../libs"
+          # بناء
           make PROOT_WITH_LIBANDROID_SHMEM=true
 
       # ----------------------------------------------
