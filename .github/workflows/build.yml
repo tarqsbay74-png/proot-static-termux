@@ -36,7 +36,6 @@ jobs:
           curl -L -o libs/libtalloc-dev.deb https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/libtalloc_2.4.3_aarch64.deb
           ar x libs/libtalloc-dev.deb --output=libs/
           tar -xf libs/data.tar.xz -C libs/
-          # نسخ ملف الرأس إلى مجلد include
           cp libs/data/data/com.termux/files/usr/include/talloc.h include/
 
       # ----------------------------------------------
@@ -54,14 +53,17 @@ jobs:
         run: git clone https://github.com/termux/proot
 
       # ----------------------------------------------
-      # 5. تعديل GNUmakefile
+      # 5. تعديل GNUmakefile وإصلاح ملف enter.c
       # ----------------------------------------------
-      - name: Patch GNUmakefile
+      - name: Patch source files
         run: |
           cd proot/src
+          # إضافة -D_GNU_SOURCE لتفعيل getifaddrs
+          sed -i 's|^CFLAGS += -Wall -Wextra -O2|CFLAGS += -Wall -Wextra -O2 -D_GNU_SOURCE -I$PWD/../../include|' GNUmakefile
+          # إضافة include <ifaddrs.h> في بداية enter.c
+          sed -i '1i #include <ifaddrs.h>' syscall/enter.c
+          # تصحيح LDFLAGS
           sed -i 's|^LDFLAGS += -ltalloc -Wl,-z,noexecstack|LDFLAGS += -static -L$PWD/../../libs -ltalloc -Wl,-z,noexecstack|' GNUmakefile
-          # نضيف مسار include إلى CFLAGS داخل الملف
-          sed -i 's|^CFLAGS += -Wall -Wextra -O2|CFLAGS += -Wall -Wextra -O2 -I$PWD/../../include|' GNUmakefile
 
       # ----------------------------------------------
       # 6. بناء proot
@@ -73,7 +75,7 @@ jobs:
           export CXX=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++
           export AR=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar
           export LD=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ld
-          export CFLAGS="-fPIC -O2 -I$PWD/../../include"
+          export CFLAGS="-fPIC -O2 -D_GNU_SOURCE -I$PWD/../../include"
           export LDFLAGS="-static -L$PWD/../../libs"
           make PROOT_WITH_LIBANDROID_SHMEM=true
 
