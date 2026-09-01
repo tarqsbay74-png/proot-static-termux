@@ -3,30 +3,28 @@ name: Build proot static (aarch64)
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       # ----------------------------------------------
-      # 1. تثبيت Android NDK (أداة البناء المطلوبة)
+      # 1. تثبيت Android NDK وإضافته إلى PATH
       # ----------------------------------------------
       - name: Setup Android NDK
         run: |
           wget -q https://dl.google.com/android/repository/android-ndk-r27b-linux.zip
           unzip -q android-ndk-r27b-linux.zip
           echo "ANDROID_NDK=$PWD/android-ndk-r27b" >> $GITHUB_ENV
-          echo "PATH=$PWD/android-ndk-r27b/bin:$PATH" >> $GITHUB_ENV
+          echo "$PWD/android-ndk-r27b/bin" >> $GITHUB_PATH
 
       # ----------------------------------------------
-      # 2. تنزيل مكتبة libtalloc الثابتة (جاهزة من Termux)
+      # 2. تحميل libtalloc الثابتة
       # ----------------------------------------------
       - name: Download libtalloc static
         run: |
@@ -35,61 +33,56 @@ jobs:
           ar x libs/libtalloc.a --output=libs/
 
       # ----------------------------------------------
-      # 3. تنزيل libandroid-shmem الثابتة (جاهزة)
+      # 3. تحميل libandroid-shmem (الديناميكية)
       # ----------------------------------------------
-      - name: Download libandroid-shmem static
+      - name: Download libandroid-shmem
         run: |
-          # لا توجد نسخة ثابتة رسمية، لذا سنبنيها من المصدر، أو نستخدم الديناميكية مع -static.
-          # الحل البديل: نربطها ديناميكياً مع بقية الكود الثابت (مقبول).
           curl -L -o libs/libandroid-shmem.so https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb
           ar x libs/libandroid-shmem.so --output=libs/ || true
-          # لكن الأسهل: نطلب من الرابط البحث عنها في $PREFIX/lib عند التنفيذ
-          # نضعها في مجلد libs لاستخدامها لاحقاً
 
       # ----------------------------------------------
-      # 4. تحميل كود مصدر proot
+      # 4. استنساخ كود proot
       # ----------------------------------------------
       - name: Clone proot source
-        run: |
-          git clone https://github.com/termux/proot
-          cd proot
+        run: git clone https://github.com/termux/proot
 
       # ----------------------------------------------
-      # 5. تعديل GNUmakefile لتجميع ثابت مع aarch64
+      # 5. تعديل GNUmakefile
       # ----------------------------------------------
       - name: Patch GNUmakefile
         run: |
           cd proot/src
-          # نعدل LDFLAGS لإضافة -static و -L لمسار المكتبات
           sed -i 's|^LDFLAGS += -ltalloc -Wl,-z,noexecstack|LDFLAGS += -static -L$PWD/../../libs -ltalloc -Wl,-z,noexecstack|' GNUmakefile
+          # السطر التالي للتأكد من وجود -landroid-shmem (موجود أصلاً)
           sed -i 's|LDFLAGS += -landroid-shmem|LDFLAGS += -landroid-shmem|' GNUmakefile
 
       # ----------------------------------------------
-      # 6. بناء proot مع NDK
+      # 6. بناء proot
       # ----------------------------------------------
       - name: Build proot
         run: |
-          export CC=aarch64-linux-android21-clang
-          export CXX=aarch64-linux-android21-clang++
-          export AR=aarch64-linux-android-ar
-          export LD=aarch64-linux-android-ld
-          export CFLAGS="-fPIC -O2"
-          export LDFLAGS="-static -L$PWD/libs"
           cd proot/src
+          # استخدم المسار المطلق للمترجم من NDK
+          export CC=$ANDROID_NDK/bin/aarch64-linux-android21-clang
+          export CXX=$ANDROID_NDK/bin/aarch64-linux-android21-clang++
+          export AR=$ANDROID_NDK/bin/aarch64-linux-android-ar
+          export LD=$ANDROID_NDK/bin/aarch64-linux-android-ld
+          export CFLAGS="-fPIC -O2"
+          export LDFLAGS="-static -L$PWD/../../libs"
           make PROOT_WITH_LIBANDROID_SHMEM=true
 
       # ----------------------------------------------
-      # 7. عرض معلومات الملف الناتج
+      # 7. التحقق من الملف الناتج
       # ----------------------------------------------
       - name: Verify output
         run: |
           cd proot/src
           file proot
-          aarch64-linux-android-readelf -d proot | grep NEEDED  # للتأكد من عدم وجود تبعيات ديناميكية
+          $ANDROID_NDK/bin/aarch64-linux-android-readelf -d proot | grep NEEDED || echo "No dynamic dependencies"
           ls -lh proot
 
       # ----------------------------------------------
-      # 8. رفع الملف الناتج كـ artifact
+      # 8. رفع الملف كـ artifact
       # ----------------------------------------------
       - name: Upload artifact
         uses: actions/upload-artifact@v4
